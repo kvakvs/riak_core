@@ -690,12 +690,31 @@ reply({fsm, undefined, From}, Reply) ->
 reply({fsm, Ref, From}, Reply) ->
     gen_fsm:send_event(From, {Ref, Reply});
 reply({server, undefined, From}, Reply) ->
-    gen_server:reply(From, Reply);
+    reply_noconnect(From, Reply);
 reply({server, Ref, From}, Reply) ->
-    gen_server:reply(From, {Ref, Reply});
+    reply_noconnect(From, {Ref, Reply});
 reply({raw, Ref, From}, Reply) ->
-    From ! {Ref, Reply};
+    erlang:send(From, {Ref, Reply}, [noconnect]);
 reply(ignore, _Reply) ->
+    ok.
+
+%% NOTE: We'ed peeked inside gen_server.erl's guts to see its internals.
+reply_noconnect({To, Tag}, Reply) ->
+    catch erlang:send(To, {Tag, Reply}, [noconnect]).
+
+%% NOTE: We'ed peeked inside gen_fsm.erl's guts to see its internals.
+send_event_noconnect({global, Name}, Event) ->
+    %% TODO review question: is this case worth worrying about?
+    catch global:send(Name, {'$gen_event', Event}),
+    ok;
+send_event_noconnect({via, Mod, Name}, Event) ->
+    %% TODO review question: is this case worth worrying about?
+    %% We'd probably have to create a send/3 variant to honor our
+    %% intent & requirement?
+    catch Mod:send(Name, {'$gen_event', Event}),
+    ok;
+send_event_noconnect(Name, Event) ->
+    erlang:send(Name, {'$gen_event', Event}, [noconnect]),
     ok.
 
 %% @doc Set up a monitor for the pid named by a {@type sender()} vnode
